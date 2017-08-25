@@ -1,0 +1,282 @@
+---
+title: "Pricing options via Binomial Trees in R"
+author: "Nicolai Vicol"
+date: "August 24, 2017"
+output: html_document
+---
+
+\
+```{r udf}
+getExampleInputs <- function()
+{
+  # standard inputs for European and American options
+  S0 <<- 100         # asset price at t=0
+  K <<- 105          # strike
+  vol <<- 0.15       # volatility
+  dT <<- 1           # time to maturity (years)
+  r <<- 0.05         # risk-free rate
+  qdiv <<- 0         # dividend rate
+  N_steps <<- 50     # number of steps in tree
+  isPut <<- F        # default: F (Call)
+  isAmerican <<- F   # default: F (European)
+  
+  # additional inputs for exotic options
+  isAvgStrike <<- F  # is average strike options
+  isKO <<- F         # is knock-out option
+  H <<- 110          # barrier strike for knock-out
+  isChooser <<- F    # is chooser option
+  Kc <<- 105         # call strike for chooser option
+  Kp <<- 95          # put strike for chooser option
+  choose_t1 <<- 0.5  # time to choose for chooser option
+}
+
+getBinomTree <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F, 
+                         isAvgStrike=F, isKO=F, isChooser=F, H=NA, Kc=NA, Kp=NA, choose_t1=NA)
+{
+  # number of nodes in tree
+  N_nodes <- (N_steps+1)*(1 + (N_steps+1))/2 # sum(1:(N_steps+1)) = n*(a_1 + a_n)/2 
+  
+  # time difference between steps
+  dT_step <- dT/N_steps
+  
+  # discount factor for one step
+  D_step <- exp(-r*dT_step) 
+  
+  # up-movement factor
+  u <- exp(vol*dT_step^0.5)
+  
+  # down-movement factor
+  d <- 1/u 
+  
+  # probability of up movement in a risk-neutral world
+  p <- (exp((r - qdiv)*dT_step) - d)/(u - d)
+  
+  # create a data frame to keep nodes of tree with a mapping: dt(row_i) -> node_id like:
+  # 0|1|2|...|i                 ... |n
+  # ....................................................
+  #                                 (n+1)*(1+n+1)/2 - n
+  #                             ...
+  #          (i+1)*(1+i+1)/2-i
+  #     4 ...
+  #   2     
+  # 1   5 ...(i+1)*(1+i+1)/2-j
+  #   3
+  #     6 ...
+  #          (i+1)*(1+i+1)/2    ...
+  #                                 (n+1)*(1+n+1)/2
+  
+  dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA)
+  if (isAmerican) {
+    dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA, dP_Exerc = NA)
+  }
+  if (isChooser) {
+    dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P_Call = NA, P_Put = NA, P = NA)
+  }
+
+  for (i in N_steps:0)
+  {
+    for (j in 0:i)
+    {
+      i_node <- (i+1)*(1+i+1)/2-j  # get id of node
+      dta$step[i_node] <- i  # time step
+      dta$N_u[i_node] <- j  # number of u multiplication
+      dta$S[i_node] <- S0 * d^(i-j) * u^j # underlying asset price
+      
+      # at terminal node - payoff at expir:
+      if (i == N_steps) 
+      {
+        dta$P[i_node] <- ifelse(isPut, max(K - dta$S[i_node], 0), max(dta$S[i_node] - K, 0))
+        if (isAmerican)
+        {
+          dta$dP_Exerc[i_node] <- 0
+        }
+        if (isAvgStrike)
+        {
+          Savg <- getAvgStrikes(S0, j, i-j, d, u) # avg values of underlying price along all possible paths
+          if (isPut) {
+            dta$P[i_node] <- mean(pmax(Savg - dta$S[i_node], 0))
+          } else {
+            dta$P[i_node] <- mean(pmax(dta$S[i_node] - Savg, 0))
+          }
+        }
+        if (isChooser)
+        {
+          dta$P_Call[i_node] <- max(dta$S[i_node] - Kc, 0)
+          dta$P_Put[i_node] <- max(Kp - dta$S[i_node], 0)
+          dta$P[i_node] <- NA
+        }
+      } 
+      # at interim nodes - backward induction:
+      if (i < N_steps) 
+      { 
+        i_node_u <- ((i+1)+1)*(1+(i+1)+1)/2-(j+1) # find id of up node
+        i_node_d <- ((i+1)+1)*(1+(i+1)+1)/2-j     # find if of down node
+        dta$P[i_node] <- D_step * (p*dta$P[i_node_u] + (1-p)*dta$P[i_node_d])
+        if (isAmerican)
+        {
+          P_Exerc <- ifelse(isPut, max(K - dta$S[i_node], 0), max(dta$S[i_node] - K, 0))
+          dta$dP_Exerc[i_node] <- P_Exerc - dta$P[i_node]
+          dta$P[i_node] <- max(dta$P[i_node], P_Exerc)
+        }
+        if (isChooser)
+        {
+          dta$P_Call[i_node] <- D_step * (p*dta$P_Call[i_node_u] + (1-p)*dta$P_Call[i_node_d])
+          dta$P_Put[i_node] <- D_step * (p*dta$P_Put[i_node_u] + (1-p)*dta$P_Put[i_node_d])
+          if (i == round(choose_t1/(dT/N_steps), 0)){
+            dta$P[i_node] <- max(dta$P_Call[i_node], dta$P_Put[i_node])
+          }
+        }
+      }
+      if (isKO)
+      {
+        if (isPut) {
+          if (dta$S[i_node] >= H) { dta$P[i_node] <- 0 }
+        } else {
+          if (dta$S[i_node] <= H) { dta$P[i_node] <- 0 }
+        }
+      }
+    }
+  }
+  return(dta)
+}
+
+# get the average values of all possible paths of the underlying until the terminal node
+# used for average strike options
+getAvgStrikes <- function(S0, N_u, N_d, d, u)
+{
+  # (!) N of permutations of multisets = (N_u+N_d)!/(N_d!*N_u!)
+  if ((N_u + N_d) > 10)
+  {
+    print("(!) Give a lower number of N steps for the tree. N enters as factorial!")
+    return(NA)
+  }
+  mx_comb <- combn(1:(N_u + N_d), N_u, simplify = FALSE)
+  mx_perm <- data.frame(matrix(unlist(mx_comb), nrow = length(mx_comb), byrow = T))
+  mx_ud <- data.frame(matrix(d, nrow = nrow(mx_perm), ncol = (N_u + N_d)))
+  mx_Savg <- rep(NA, nrow(mx_ud))
+  for (i in 1:nrow(mx_ud))
+  {
+    mx_ud[i, unlist(mx_perm[i, ])] <- u
+    St <- S0
+    sumS <- S0
+    for (j in 1:ncol(mx_ud))
+    {
+      St <- mx_ud[i, j] * St
+      sumS <- sumS + St
+    }
+    mx_Savg[i] <- sumS/(1 + ncol(mx_ud))
+  }
+  return(mx_Savg)
+}
+
+# "envelope" functions for different type of options
+# chooser option
+getBinomTree.chooser <- function(S0, K, vol, dT, r, qdiv, N_steps, Kc, Kp, choose_t1)
+{
+  dta <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F, 
+                      isAvgStrike=F, isKO=F, isChooser=T, H=NA, Kc, Kp, choose_t1)
+  return(dta)
+}
+# knock-out option
+getBinomTree.ko <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut, H)
+{
+  dta <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
+                      isAvgStrike=F, isKO=T, isChooser=F, H, Kc=NA, Kp=NA, choose_t1=NA)
+  return(dta)
+}
+# average strike option
+getBinomTree.avgK <- function(S0, vol, dT, r, qdiv, N_steps, isPut)
+{
+  if (N_steps > 10)
+  {
+    N_steps <- 10
+    print("(!) N_steps set equal to 10. N_steps enters as factorial in number of possible paths!")
+  }
+  dta <- getBinomTree(S0, K=NA, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
+                      isAvgStrike=T, isKO=F, isChooser=F, H=NA, Kc=NA, Kp=NA, choose_t1=NA)
+  return(dta)
+}
+```
+
+
+#Examples of pricing   
+**Parameters of the tree:**   
+A binomial tree model with N time steps, e.g. N={10, 20, 50}.      
+Suppose that $u=e^{(\sigma*\sqrt{t})}$, where $\sigma=0.15$, and $d=1/u$, $S_0=100$.  
+The continuously compounded risk-free interest rate is $r=5%$ p.a. for all maturities.      
+\
+a) Price a European call option with maturity T-t = 1 year, and strike K=105.
+```{r a}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=F)
+dta$P[1]
+```
+...show head and tail of the data frame containing the tree mapped into it:      
+```{r}
+head(dta, 10)
+tail(dta, 55)
+```
+\
+b) Price a European put option with maturity T-t = 1 year, and strike K=105
+```{r b}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T)
+dta$P[1]
+```
+\
+c) Price an American put option with maturity T-t = 1 year, and strike K=105 
+(assume that the option can be exercised at any node after t). 
+```{r c}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T, isAmerican=T)
+dta$P[1]
+```
+Show in which nodes of the tree is it optimal to exercise this option.
+```{r}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=10, isPut=T, isAmerican=T)
+head(dta[dta$P > 0 & dta$dP_Exerc >= 0, ], sum(dta$P > 0 & dta$dP_Exerc >= 0))
+```
+\
+d) Price an average-strike put option of European-type (can only be exercised at maturity) with maturity T-t = 1 year.    
+The payoff of the option at maturity is $max(S_{avg}-S_T,0)$, where $S_{avg}=1/N*\sum\limits_{i=1}^{N}S_{t+i*dt}$       
+For faster computation: let's take N=10, the number of possible paths grows as function factorial of N.     
+```{r e}
+dta <- getBinomTree.avgK(S0=100, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=10, isPut=T)
+dta$P[1]
+```
+\
+e) Price an "up-and-out" put option (a knock-out put option) of European type (can only be exercised at maturity)    
+with maturity T-t = 1 year, strike K=105 and the barrier H=110    
+(the option ceases to exist when the barrier is reached at least once).   
+```{r d}
+dta <- getBinomTree.ko(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T, H=110)
+dta$P[1]
+```
+\
+f) - i) Price a chooser option with the following characteristics:    
+The holder can choose whether the option is a call with maturity T-t = 1 year and strike Kc=105,     
+or a put with maturity T-t = 1 year and strike Kp = 95.     
+Both these options are European-type (can only be exercised at maturity).     
+The holder must announce his choice at T1-t = 6 months.   
+```{r f-i}
+dta <- getBinomTree.chooser(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, Kc=105, Kp=95, choose_t1=0.5)
+P_choose_050 <- dta$P[1]
+dta$P[1]
+```
+\
+f) - ii) Price a chooser option with the following characteristics:    
+The holder can choose whether the option is a call with maturity T-t = 1 year, or a put with maturity T-t = 1 year.     
+Both these options are European-type (can only be exercised at maturity). The holder must announce his choice at    
+either T1=t+3 months (take the node closest to 3 months), or T2=t+6 months. Once the choice is announced, the type     
+of the option cannot be changed. If the holder announces his choice at T1, then the strike prices are given by Kc=105,    
+and Kp=95. If the holder announces his choice at T2, then the strike prices are given by Kc=108, and Kp=92.      
+```{r f-ii}
+dta <- getBinomTree.chooser(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, Kc=105, Kp=95, choose_t1=0.25)
+P_choose_025 <- dta$P[1]
+dta$P[1]
+```
+Find the best time for the holder to announce his choice.    
+```{r, echo=F}
+print(paste("P(choose at t=0.50):", P_choose_050))
+print(paste("P(choose at t=0.25):", P_choose_025))
+print("better to exercise at t=0.5 than at t=0.25")
+print("value of option with two choose times (0.25, 0.50) but only one choice is equal to value of choice at t=0.50")
+```
+
