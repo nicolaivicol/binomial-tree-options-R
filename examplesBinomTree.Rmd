@@ -1,0 +1,93 @@
+---
+title: "Pricing options via Binomial Trees in R"
+author: "Nicolai Vicol"
+date: "August 24, 2017"
+output: html_document
+---
+
+\
+```{r, echo=FALSE}
+source("E:/interviews/pandawerk/task/getBinomTree.R")
+```
+
+#Examples of pricing   
+**Parameters of the tree:**   
+A binomial tree model with N time steps, e.g. N={10, 20, 50}.      
+Suppose that $u=e^{(\sigma*\sqrt{t})}$, where $\sigma=0.15$, and $d=1/u$, $S_0=100$.  
+The continuously compounded risk-free interest rate is $r=5%$ p.a. for all maturities.      
+\
+a) Price a European call option with maturity T-t = 1 year, and strike K=105.
+```{r}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=F)
+dta$P[1]
+```
+...show head and tail of the data frame containing the tree mapped into it:      
+```{r}
+head(dta, 10)
+tail(dta, 55)
+```
+\
+b) Price a European put option with maturity T-t = 1 year, and strike K=105
+```{r}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T)
+dta$P[1]
+```
+\
+c) Price an American put option with maturity T-t = 1 year, and strike K=105 
+(assume that the option can be exercised at any node after t). 
+```{r}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T, isAmerican=T)
+dta$P[1]
+```
+Show in which nodes of the tree is it optimal to exercise this option.
+```{r}
+dta <- getBinomTree(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=10, isPut=T, isAmerican=T)
+head(dta[dta$P > 0 & dta$dP_Exerc >= 0, ], sum(dta$P > 0 & dta$dP_Exerc >= 0))
+```
+\
+d) Price an average-strike put option of European-type (can only be exercised at maturity) with maturity T-t = 1 year.    
+The payoff of the option at maturity is $max(S_{avg}-S_T,0)$, where $S_{avg}=1/N*\sum\limits_{i=1}^{N}S_{t+i*dt}$       
+For faster computation: let's take N=10, the number of possible paths grows as function factorial of N.     
+```{r}
+dta <- getBinomTree.avgK(S0=100, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=10, isPut=T)
+dta$P[1]
+```
+\
+e) Price an "up-and-out" put option (a knock-out put option) of European type (can only be exercised at maturity)    
+with maturity T-t = 1 year, strike K=105 and the barrier H=110    
+(the option ceases to exist when the barrier is reached at least once).   
+```{r d}
+dta <- getBinomTree.ko(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, isPut=T, H=110)
+dta$P[1]
+```
+\
+f) - i) Price a chooser option with the following characteristics:    
+The holder can choose whether the option is a call with maturity T-t = 1 year and strike Kc=105,     
+or a put with maturity T-t = 1 year and strike Kp = 95.     
+Both these options are European-type (can only be exercised at maturity).     
+The holder must announce his choice at T1-t = 6 months.   
+```{r f-i}
+dta <- getBinomTree.chooser(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, Kc=105, Kp=95, choose_t1=0.5)
+P_choose_050 <- dta$P[1]
+dta$P[1]
+```
+\
+f) - ii) Price a chooser option with the following characteristics:    
+The holder can choose whether the option is a call with maturity T-t = 1 year, or a put with maturity T-t = 1 year.     
+Both these options are European-type (can only be exercised at maturity). The holder must announce his choice at    
+either T1=t+3 months (take the node closest to 3 months), or T2=t+6 months. Once the choice is announced, the type     
+of the option cannot be changed. If the holder announces his choice at T1, then the strike prices are given by Kc=105,    
+and Kp=95. If the holder announces his choice at T2, then the strike prices are given by Kc=108, and Kp=92.      
+```{r f-ii}
+dta <- getBinomTree.chooser(S0=100, K=105, vol=0.15, dT=1, r=0.05, qdiv=0, N_steps=50, Kc=105, Kp=95, choose_t1=0.25)
+P_choose_025 <- dta$P[1]
+dta$P[1]
+```
+Find the best time for the holder to announce his choice.    
+```{r, echo=F}
+print(paste("P(choose at t=0.50):", P_choose_050))
+print(paste("P(choose at t=0.25):", P_choose_025))
+print("better to exercise at t=0.5 than at t=0.25")
+print("value of option with two choose times (0.25, 0.50) but only one choice is equal to value of choice at t=0.50")
+```
+
