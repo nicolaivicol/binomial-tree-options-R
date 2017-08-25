@@ -35,4 +35,4 @@ and additional inputs for exotic options:
 - `Kp`:  put strike for chooser option
 - `choose_t1`:  time to choose for chooser option
 
-## Examples of pricing: [See here](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examples.html)
+## Examples of pricing: [See here](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examplesBinomTree.html)
