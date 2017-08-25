@@ -1,6 +1,8 @@
 # Pricing options via Binomial Trees in `R`
 European, American, Chooser, Knock-Out, Average Strike
 
+## Examples of pricing: [See here](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examplesBinomTree.html)
+
 ## Instructions:
 
 The following function returns a data frame having the binomial tree mapped into it:
@@ -34,5 +36,3 @@ and additional inputs for exotic options:
 - `Kc`:  call strike for chooser option
 - `Kp`:  put strike for chooser option
 - `choose_t1`:  time to choose for chooser option
-
-## Examples of pricing: [See here](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examplesBinomTree.html)
