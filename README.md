@@ -36,4 +36,4 @@ and additional inputs for exotic options:
 - `choose_t1`:  time to choose for chooser option
 
 ## Examples:
-[Examples of pricing] (https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/binomial_tree_options.html)
+[See examples:](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/binomial_tree_options.html)
