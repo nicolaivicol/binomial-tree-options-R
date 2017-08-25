@@ -36,12 +36,12 @@ getBinomTree <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F
   #          (i+1)*(1+i+1)/2    ...
   #                                 (n+1)*(1+n+1)/2
   
-  dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA)
+  df <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA)
   if (isAmerican) {
-    dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA, dP_Exerc = NA)
+    df <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P = NA, dP_Exerc = NA)
   }
   if (isChooser) {
-    dta <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P_Call = NA, P_Put = NA, P = NA)
+    df <- data.frame(i_node = 1:N_nodes, step=NA, N_u = NA, S = NA, P_Call = NA, P_Put = NA, P = NA)
   }
   
   for (i in N_steps:0)
@@ -49,32 +49,32 @@ getBinomTree <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F
     for (j in 0:i)
     {
       i_node <- (i+1)*(1+i+1)/2-j  # get id of node
-      dta$step[i_node] <- i  # time step
-      dta$N_u[i_node] <- j  # number of u multiplication
-      dta$S[i_node] <- S0 * d^(i-j) * u^j # underlying asset price
+      df$step[i_node] <- i  # time step
+      df$N_u[i_node] <- j  # number of u multiplication
+      df$S[i_node] <- S0 * d^(i-j) * u^j # underlying asset price
       
       # at terminal node - payoff at expir:
       if (i == N_steps) 
       {
-        dta$P[i_node] <- ifelse(isPut, max(K - dta$S[i_node], 0), max(dta$S[i_node] - K, 0))
+        df$P[i_node] <- ifelse(isPut, max(K - df$S[i_node], 0), max(df$S[i_node] - K, 0))
         if (isAmerican)
         {
-          dta$dP_Exerc[i_node] <- 0
+          df$dP_Exerc[i_node] <- 0
         }
         if (isAvgStrike)
         {
           Savg <- getAvgStrikes(S0, j, i-j, d, u) # avg values of underlying price along all possible paths
           if (isPut) {
-            dta$P[i_node] <- mean(pmax(Savg - dta$S[i_node], 0))
+            df$P[i_node] <- mean(pmax(Savg - df$S[i_node], 0))
           } else {
-            dta$P[i_node] <- mean(pmax(dta$S[i_node] - Savg, 0))
+            df$P[i_node] <- mean(pmax(df$S[i_node] - Savg, 0))
           }
         }
         if (isChooser)
         {
-          dta$P_Call[i_node] <- max(dta$S[i_node] - Kc, 0)
-          dta$P_Put[i_node] <- max(Kp - dta$S[i_node], 0)
-          dta$P[i_node] <- NA
+          df$P_Call[i_node] <- max(df$S[i_node] - Kc, 0)
+          df$P_Put[i_node] <- max(Kp - df$S[i_node], 0)
+          df$P[i_node] <- NA
         }
       } 
       # at interim nodes - backward induction:
@@ -82,33 +82,33 @@ getBinomTree <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F
       { 
         i_node_u <- ((i+1)+1)*(1+(i+1)+1)/2-(j+1) # find id of up node
         i_node_d <- ((i+1)+1)*(1+(i+1)+1)/2-j     # find if of down node
-        dta$P[i_node] <- D_step * (p*dta$P[i_node_u] + (1-p)*dta$P[i_node_d])
+        df$P[i_node] <- D_step * (p*df$P[i_node_u] + (1-p)*df$P[i_node_d])
         if (isAmerican)
         {
-          P_Exerc <- ifelse(isPut, max(K - dta$S[i_node], 0), max(dta$S[i_node] - K, 0))
-          dta$dP_Exerc[i_node] <- P_Exerc - dta$P[i_node]
-          dta$P[i_node] <- max(dta$P[i_node], P_Exerc)
+          P_Exerc <- ifelse(isPut, max(K - df$S[i_node], 0), max(df$S[i_node] - K, 0))
+          df$dP_Exerc[i_node] <- P_Exerc - df$P[i_node]
+          df$P[i_node] <- max(df$P[i_node], P_Exerc)
         }
         if (isChooser)
         {
-          dta$P_Call[i_node] <- D_step * (p*dta$P_Call[i_node_u] + (1-p)*dta$P_Call[i_node_d])
-          dta$P_Put[i_node] <- D_step * (p*dta$P_Put[i_node_u] + (1-p)*dta$P_Put[i_node_d])
+          df$P_Call[i_node] <- D_step * (p*df$P_Call[i_node_u] + (1-p)*df$P_Call[i_node_d])
+          df$P_Put[i_node] <- D_step * (p*df$P_Put[i_node_u] + (1-p)*df$P_Put[i_node_d])
           if (i == round(choose_t1/(dT/N_steps), 0)){
-            dta$P[i_node] <- max(dta$P_Call[i_node], dta$P_Put[i_node])
+            df$P[i_node] <- max(df$P_Call[i_node], df$P_Put[i_node])
           }
         }
       }
       if (isKO)
       {
         if (isPut) {
-          if (dta$S[i_node] >= H) { dta$P[i_node] <- 0 }
+          if (df$S[i_node] >= H) { df$P[i_node] <- 0 }
         } else {
-          if (dta$S[i_node] <= H) { dta$P[i_node] <- 0 }
+          if (df$S[i_node] <= H) { df$P[i_node] <- 0 }
         }
       }
     }
   }
-  return(dta)
+  return(df)
 }
 
 # example of inputs
@@ -139,16 +139,16 @@ getExampleInputs <- function()
 # chooser option
 getBinomTree.chooser <- function(S0, K, vol, dT, r, qdiv, N_steps, Kc, Kp, choose_t1)
 {
-  dta <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F, 
+  df <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut=F, isAmerican=F, 
                       isAvgStrike=F, isKO=F, isChooser=T, H=NA, Kc, Kp, choose_t1)
-  return(dta)
+  return(df)
 }
 # knock-out option
 getBinomTree.ko <- function(S0, K, vol, dT, r, qdiv, N_steps, isPut, H)
 {
-  dta <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
+  df <- getBinomTree(S0, K, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
                       isAvgStrike=F, isKO=T, isChooser=F, H, Kc=NA, Kp=NA, choose_t1=NA)
-  return(dta)
+  return(df)
 }
 # average strike option
 getBinomTree.avgK <- function(S0, vol, dT, r, qdiv, N_steps, isPut)
@@ -158,9 +158,9 @@ getBinomTree.avgK <- function(S0, vol, dT, r, qdiv, N_steps, isPut)
     N_steps <- 10
     print("(!) N_steps set equal to 10. N_steps enters as factorial in number of possible paths!")
   }
-  dta <- getBinomTree(S0, K=NA, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
+  df <- getBinomTree(S0, K=NA, vol, dT, r, qdiv, N_steps, isPut, isAmerican=F, 
                       isAvgStrike=T, isKO=F, isChooser=F, H=NA, Kc=NA, Kp=NA, choose_t1=NA)
-  return(dta)
+  return(df)
 }
 
 # get the average values of all possible paths of the underlying until the terminal node
