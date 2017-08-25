@@ -1,7 +1,7 @@
 # Pricing options via Binomial Trees in `R`
 European, American, Chooser, Knock-Out, Average Strike
 
-## Examples of pricing: [See here](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examplesBinomTree.html)
+## Examples of pricing: [see here in html preview](https://htmlpreview.github.io/?https://github.com/nicolaivicol/binomial-tree-options-R/blob/master/examplesBinomTree.html)
 
 ## Instructions:
 
