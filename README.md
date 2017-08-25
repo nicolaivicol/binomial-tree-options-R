@@ -38,3 +38,8 @@ and additional inputs for exotic options:
 - `Kc`:  call strike for chooser option
 - `Kp`:  put strike for chooser option
 - `choose_t1`:  time to choose for chooser option
+
+For convenience the `getBinomTree` function has several "envelope" functions:
+- *average strike:* `getBinomTree.avgK(S0, K, vol, dT, r, qdiv, N_steps, Kc, Kp, choose_t1)`
+- *knock-out:*  `getBinomTree.ko(S0, K, vol, dT, r, qdiv, N_steps, isPut, H)`
+- *chooser:*  `getBinomTree.avgK(S0, vol, dT, r, qdiv, N_steps, isPut)`
