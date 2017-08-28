@@ -181,13 +181,13 @@ getAvgStrikes <- function(S0, N_u, N_d, d, u)
   {
     mx_ud[i, unlist(mx_perm[i, ])] <- u
     St <- S0
-    sumS <- S0
+    sumS <- 0
     for (j in 1:ncol(mx_ud))
     {
       St <- mx_ud[i, j] * St
       sumS <- sumS + St
     }
-    mx_Savg[i] <- sumS/(1 + ncol(mx_ud))
+    mx_Savg[i] <- sumS/(ncol(mx_ud))
   }
   return(mx_Savg)
 }
